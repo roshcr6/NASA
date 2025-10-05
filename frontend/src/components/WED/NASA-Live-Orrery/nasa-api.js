@@ -7,10 +7,22 @@
 class NASAAPIService {
     constructor() {
         // Version identifier
-        this.version = '2.0-planet-images';
+        this.version = '2.1-backend-integrated';
         console.log(`🚀 NASA API Service v${this.version} initialized`);
         
-        // NASA NEO API configuration
+        // Try to use Django backend first, fallback to direct NASA API
+        this.useBackend = true;
+        const API_BASE_URL = typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_URL 
+            ? process.env.REACT_APP_API_URL 
+            : (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000');
+        
+        this.backendURL = API_BASE_URL.includes('localhost:3000') 
+            ? 'http://localhost:8000/api'
+            : `${API_BASE_URL}/api`;
+        
+        console.log(`🔗 Backend API URL: ${this.backendURL}`);
+        
+        // NASA NEO API configuration (fallback)
         this.baseURL = 'https://api.nasa.gov/neo/rest/v1';
         this.apiKey = 'YrhAbXPIcjuMmifLigw6lWpXE9vHLSgoUbJvGLwp'; // Updated NASA API key
         this.cache = new Map();
@@ -66,12 +78,73 @@ class NASAAPIService {
                 }
             }
 
+            // TRY BACKEND FIRST (recommended - avoids rate limits)
+            if (this.useBackend) {
+                try {
+                    console.log(`🔗 Fetching NEO data from Django backend...`);
+                    const backendURL = `${this.backendURL}/asteroids?hazardous_only=${hazardousOnly}`;
+                    console.log(`📡 Backend URL: ${backendURL}`);
+                    
+                    const response = await fetch(backendURL, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        timeout: 30000 // 30 second timeout
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log('✅ Backend API response received');
+                        console.log(`📊 Asteroids from backend: ${data.asteroids?.length || 0}`);
+                        
+                        if (data.asteroids && data.asteroids.length > 0) {
+                            // Backend returns data in our format already
+                            const asteroids = data.asteroids.map(ast => ({
+                                id: ast.id,
+                                name: ast.name,
+                                nasa_jpl_url: ast.nasa_jpl_url || `https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=${ast.id}`,
+                                absolute_magnitude_h: ast.absolute_magnitude_h,
+                                estimated_diameter: ast.estimated_diameter,
+                                is_potentially_hazardous: ast.is_potentially_hazardous_asteroid || ast.is_potentially_hazardous,
+                                close_approach_data: ast.close_approach_data,
+                                diameter_km_min: ast.estimated_diameter?.kilometers?.estimated_diameter_min || 0,
+                                diameter_km_max: ast.estimated_diameter?.kilometers?.estimated_diameter_max || 0,
+                                diameter_km_avg: ((ast.estimated_diameter?.kilometers?.estimated_diameter_min || 0) + 
+                                                 (ast.estimated_diameter?.kilometers?.estimated_diameter_max || 0)) / 2,
+                                closest_approach: ast.close_approach_data?.[0] || null,
+                                velocity_kmps: parseFloat(ast.close_approach_data?.[0]?.relative_velocity?.kilometers_per_second || 0),
+                                miss_distance_km: parseFloat(ast.close_approach_data?.[0]?.miss_distance?.kilometers || 0),
+                                miss_distance_au: parseFloat(ast.close_approach_data?.[0]?.miss_distance?.astronomical || 0),
+                                orbital_data: ast.orbital_data || {}
+                            }));
+                            
+                            console.log(`✅ Processed ${asteroids.length} asteroids from backend`);
+                            
+                            // Cache the result
+                            this.cache.set(cacheKey, {
+                                data: asteroids,
+                                timestamp: Date.now()
+                            });
+                            
+                            return asteroids;
+                        }
+                    }
+                    
+                    console.warn('⚠️ Backend API unavailable, falling back to direct NASA API');
+                } catch (backendError) {
+                    console.warn('⚠️ Backend connection failed:', backendError.message);
+                    console.log('💡 Falling back to direct NASA API...');
+                }
+            }
+
+            // FALLBACK: Use direct NASA API
             // Add delay to avoid rate limits
             await this.rateLimit();
             
             const url = `${this.baseURL}/feed?start_date=${startDate}&end_date=${endDate}&api_key=${this.apiKey}`;
             
-            console.log(`📡 Fetching NEO data from NASA API...`);
+            console.log(`📡 Fetching NEO data directly from NASA API...`);
             console.log(`🔗 URL: ${url.replace(this.apiKey, 'API_KEY_HIDDEN')}`);
             console.log(`📅 Date range: ${startDate} to ${endDate}`);
             
@@ -96,7 +169,7 @@ class NASAAPIService {
             // Process and filter data
             const asteroids = this.processNEOFeedData(data, hazardousOnly);
             
-            console.log(`✅ Processed ${asteroids.length} asteroids from NASA NEO API`);
+            console.log(`✅ Processed ${asteroids.length} asteroids from direct NASA NEO API`);
             
             // Cache the result
             this.cache.set(cacheKey, {

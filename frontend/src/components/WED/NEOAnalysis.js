@@ -132,11 +132,19 @@ function SimulationPage() {
   const fetchAsteroids = async () => {
     try {
       setLoadingAsteroids(true);
-      // Use correct backend endpoint
-      const response = await axios.get('http://localhost:8000/api/asteroids', {
+      // Use dynamic API URL - works in both development and production
+      const API_BASE_URL = process.env.REACT_APP_API_URL || window.location.origin;
+      const apiUrl = API_BASE_URL.includes('localhost:3000') 
+        ? 'http://localhost:8000/api/asteroids'
+        : `${API_BASE_URL}/api/asteroids`;
+      
+      console.log('🔗 Fetching from:', apiUrl);
+      
+      const response = await axios.get(apiUrl, {
         params: {
           hazardous_only: false // Get all asteroids, not just hazardous
-        }
+        },
+        timeout: 30000 // 30 second timeout
       });
       
       console.log('NASA API Response:', response.data);
@@ -151,11 +159,25 @@ function SimulationPage() {
         console.log('First asteroid:', asteroidData[0]);
       } else {
         console.warn('⚠️ No asteroids found in response');
+        // Show a user-friendly message
+        alert('No asteroid data available at the moment. Please try again later or check your internet connection.');
       }
       setLoadingAsteroids(false);
     } catch (error) {
       console.error('❌ Error fetching asteroids:', error);
       console.error('Error details:', error.response?.data || error.message);
+      
+      // Show user-friendly error message
+      if (error.code === 'ECONNABORTED') {
+        alert('Request timeout. The NASA API is taking too long to respond. Please try again.');
+      } else if (error.response) {
+        alert(`API Error: ${error.response.status}. The asteroid data service is currently unavailable.`);
+      } else if (error.request) {
+        alert('Network error. Please check your internet connection and try again.');
+      } else {
+        alert('Failed to fetch asteroid data. Please try again later.');
+      }
+      
       setLoadingAsteroids(false);
       // Set loading to false even on error so UI doesn't hang
     }

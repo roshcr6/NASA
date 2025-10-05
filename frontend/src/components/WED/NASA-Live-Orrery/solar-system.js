@@ -213,8 +213,20 @@ class LiveSolarSystem {
             antialias: true,
             alpha: true
         });
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        
+        // Fix WebGL zero-size errors - ensure canvas has valid dimensions
+        const width = window.innerWidth || canvas.clientWidth || 800;
+        const height = window.innerHeight || canvas.clientHeight || 600;
+        
+        if (width > 0 && height > 0) {
+            this.renderer.setSize(width, height);
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        } else {
+            console.warn('⚠️ Canvas has zero size, using defaults');
+            this.renderer.setSize(800, 600);
+            this.renderer.setPixelRatio(1);
+        }
+        
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -1904,9 +1916,17 @@ class LiveSolarSystem {
      * Handle window resize
      */
     onWindowResize() {
-        this.camera.aspect = window.innerWidth / window.innerHeight;
-        this.camera.updateProjectionMatrix();
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        // Fix WebGL zero-size errors on resize
+        const width = window.innerWidth || 800;
+        const height = window.innerHeight || 600;
+        
+        if (width > 0 && height > 0) {
+            this.camera.aspect = width / height;
+            this.camera.updateProjectionMatrix();
+            this.renderer.setSize(width, height);
+        } else {
+            console.warn('⚠️ Invalid window dimensions on resize');
+        }
     }
 
     /**
