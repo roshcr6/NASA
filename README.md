@@ -281,7 +281,7 @@ This project is created for educational and hackathon purposes.
 
 For questions or collaboration:
 - GitHub Issues: [Create an issue](https://github.com/yourusername/asteroid-impact-simulator/issues)
-- Email: your.email@example.com
+
 
 ---
 
